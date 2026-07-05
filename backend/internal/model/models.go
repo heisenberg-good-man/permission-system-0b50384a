@@ -34,6 +34,14 @@ type StatusHistory struct {
 	ChangedAt time.Time `json:"changed_at"`
 }
 
+type OfferDetail struct {
+	OfferSalaryMin int       `json:"offer_salary_min"`
+	OfferSalaryMax int       `json:"offer_salary_max"`
+	StartDate      string    `json:"start_date"`
+	Remarks        string    `json:"remarks"`
+	SentAt         time.Time `json:"sent_at"`
+}
+
 type Application struct {
 	ID            string          `json:"id"`
 	JobID         string          `json:"job_id"`
@@ -42,6 +50,9 @@ type Application struct {
 	AppliedAt     time.Time       `json:"applied_at"`
 	UpdatedAt     time.Time       `json:"updated_at"`
 	StatusHistory []StatusHistory `json:"status_history"`
+	OfferStatus   string          `json:"offer_status"`
+	OfferDetail   *OfferDetail    `json:"offer_detail"`
+	LastActivity  time.Time       `json:"last_activity"`
 }
 
 type Message struct {
@@ -54,8 +65,12 @@ type Message struct {
 }
 
 type Stats struct {
-	OpenJobs         int `json:"open_jobs"`
-	TodayApplications int `json:"today_applications"`
-	PendingReview    int `json:"pending_review"`
-	InCommunication  int `json:"in_communication"`
+	OpenJobs           int `json:"open_jobs"`
+	TodayApplications  int `json:"today_applications"`
+	PendingReview      int `json:"pending_review"`
+	InCommunication    int `json:"in_communication"`
+	Interviewing       int `json:"interviewing"`
+	Offered            int `json:"offered"`
+	Accepted           int `json:"accepted"`
+	Rejected           int `json:"rejected"`
 }

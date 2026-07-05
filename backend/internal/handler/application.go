@@ -15,6 +15,9 @@ func RegisterApplicationRoutes(api *gin.RouterGroup) {
 		apps.GET("/:id", GetApplication)
 		apps.POST("", CreateApplication)
 		apps.PUT("/:id/status", UpdateApplicationStatus)
+		apps.PUT("/:id/offer", SendOffer)
+		apps.PUT("/:id/offer/accept", AcceptOffer)
+		apps.PUT("/:id/offer/reject", RejectOffer)
 	}
 }
 
@@ -76,4 +79,44 @@ func UpdateApplicationStatus(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "状态更新成功"})
+}
+
+func SendOffer(c *gin.Context) {
+	id := c.Param("id")
+	var offer model.OfferDetail
+	if err := c.ShouldBindJSON(&offer); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
+		return
+	}
+	if offer.OfferSalaryMin <= 0 || offer.OfferSalaryMax <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "薪资范围为必填项"})
+		return
+	}
+	if offer.StartDate == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "到岗时间为必填项"})
+		return
+	}
+	if !store.SendOffer(id, offer) {
+		c.JSON(http.StatusNotFound, gin.H{"error": "投递记录不存在"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Offer发送成功"})
+}
+
+func AcceptOffer(c *gin.Context) {
+	id := c.Param("id")
+	if !store.AcceptOffer(id) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无法接受Offer，状态不允许"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Offer接受成功"})
+}
+
+func RejectOffer(c *gin.Context) {
+	id := c.Param("id")
+	if !store.RejectOffer(id) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "无法拒绝Offer，状态不允许"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Offer已拒绝"})
 }

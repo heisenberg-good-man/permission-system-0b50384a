@@ -72,6 +72,23 @@ export async function updateApplicationStatus(id: string, status: string): Promi
   await api.put(`/applications/${id}/status`, { status })
 }
 
+export async function sendOffer(id: string, offer: {
+  offer_salary_min: number
+  offer_salary_max: number
+  start_date: string
+  remarks?: string
+}): Promise<void> {
+  await api.put(`/applications/${id}/offer`, offer)
+}
+
+export async function acceptOffer(id: string): Promise<void> {
+  await api.put(`/applications/${id}/offer/accept`)
+}
+
+export async function rejectOffer(id: string): Promise<void> {
+  await api.put(`/applications/${id}/offer/reject`)
+}
+
 export async function getMessages(applicationId: string): Promise<Message[]> {
   const response = await api.get('/messages', { params: { application_id: applicationId } })
   return response.data.data

@@ -12,6 +12,9 @@ import {
   getApplications,
   createApplication,
   updateApplicationStatus,
+  sendOffer,
+  acceptOffer,
+  rejectOffer,
   getMessages,
   createMessage,
   getStats
@@ -191,6 +194,7 @@ function getStatusText(status: string): string {
     communicating: '沟通中',
     interviewing: '面试中',
     offered: '已发offer',
+    offer_accepted: '已接受offer',
     rejected: '已拒绝'
   }
   return map[status] || status
@@ -211,15 +215,42 @@ async function handleApply(jobId: string, resumeSummary: string) {
     showToast('error', '请先完善简历信息')
     return
   }
+  
+  const candidate = currentCandidate.value
+  const errors: string[] = []
+  
+  if (!candidate.name.trim()) {
+    errors.push('姓名不能为空')
+  }
+  if (!candidate.email.trim()) {
+    errors.push('邮箱不能为空')
+  }
+  if (!candidate.phone.trim()) {
+    errors.push('电话不能为空')
+  }
+  if (!resumeSummary.trim()) {
+    errors.push('简历摘要不能为空')
+  }
+  
+  if (errors.length > 0) {
+    showToast('error', errors.join('；'))
+    return
+  }
+  
   try {
-    if (resumeSummary.trim()) {
-      currentCandidate.value.resume_summary = resumeSummary
-      await updateCandidate(currentCandidate.value.id, { resume_summary: resumeSummary })
-    }
-    await createApplication({ job_id: jobId, candidate_id: currentCandidate.value.id })
+    currentCandidate.value.resume_summary = resumeSummary
+    await updateCandidate(currentCandidate.value.id, { resume_summary: resumeSummary })
+    
+    const result = await createApplication({ job_id: jobId, candidate_id: currentCandidate.value.id })
     showToast('success', '投递成功')
+    
     showJobDetail.value = false
-    loadData()
+    await loadData()
+    
+    const newApplication = applications.value.find(a => a.id === result.id)
+    if (newApplication) {
+      viewMessages(newApplication)
+    }
   } catch (error: any) {
     const errorMsg = error.response?.data?.error || '投递失败'
     showToast('error', errorMsg)
@@ -304,6 +335,77 @@ function handleSendMessage(content: string) {
     .catch(() => showToast('error', '发送失败'))
 }
 
+async function handleSendOffer(applicationId: string, offerData: {
+  offer_salary_min: number
+  offer_salary_max: number
+  start_date: string
+  remarks?: string
+}) {
+  try {
+    await sendOffer(applicationId, offerData)
+    showToast('success', 'Offer发送成功')
+    await loadData()
+    
+    await createMessage({
+      application_id: applicationId,
+      sender_id: 'recruiter-1',
+      sender_type: 'recruiter',
+      content: `招聘方已发送Offer，薪资范围：${offerData.offer_salary_min}-${offerData.offer_salary_max}，到岗时间：${offerData.start_date}`
+    })
+    
+    if (currentApplication.value?.id === applicationId) {
+      loadMessages(applicationId)
+    }
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || '发送失败'
+    showToast('error', errorMsg)
+  }
+}
+
+async function handleAcceptOffer(applicationId: string) {
+  try {
+    await acceptOffer(applicationId)
+    showToast('success', 'Offer接受成功')
+    await loadData()
+    
+    await createMessage({
+      application_id: applicationId,
+      sender_id: currentCandidate.value.id,
+      sender_type: 'candidate',
+      content: '候选人已接受Offer'
+    })
+    
+    if (currentApplication.value?.id === applicationId) {
+      loadMessages(applicationId)
+    }
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || '操作失败'
+    showToast('error', errorMsg)
+  }
+}
+
+async function handleRejectOffer(applicationId: string) {
+  try {
+    await rejectOffer(applicationId)
+    showToast('success', 'Offer已拒绝')
+    await loadData()
+    
+    await createMessage({
+      application_id: applicationId,
+      sender_id: currentCandidate.value.id,
+      sender_type: 'candidate',
+      content: '候选人已拒绝Offer'
+    })
+    
+    if (currentApplication.value?.id === applicationId) {
+      loadMessages(applicationId)
+    }
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || '操作失败'
+    showToast('error', errorMsg)
+  }
+}
+
 function saveCandidateInfo() {
   if (!currentCandidate.value.name || !currentCandidate.value.email) {
     showToast('error', '姓名和邮箱为必填项')
@@ -352,6 +454,10 @@ onMounted(() => {
           <StatCard title="今日投递数" :value="stats.today_applications" color="#67c23a" />
           <StatCard title="待筛选人数" :value="stats.pending_review" color="#e6a23c" />
           <StatCard title="沟通中人数" :value="stats.in_communication" color="#909399" />
+          <StatCard title="面试中人数" :value="stats.interviewing || 0" color="#f56c6c" />
+          <StatCard title="已发offer数" :value="stats.offered || 0" color="#b37feb" />
+          <StatCard title="已接受数" :value="stats.accepted || 0" color="#73c0de" />
+          <StatCard title="已拒绝数" :value="stats.rejected || 0" color="#c0c4cc" />
         </div>
       </div>
 
@@ -429,6 +535,12 @@ onMounted(() => {
                   {{ getStatusText(app.status) }}
                 </span>
               </div>
+              <div v-if="app.status === 'offered' && app.offer_detail" class="app-offer">
+                <div class="offer-info">
+                  <span>薪资：{{ app.offer_detail.offer_salary_min }}-{{ app.offer_detail.offer_salary_max }}</span>
+                  <span>到岗：{{ app.offer_detail.start_date }}</span>
+                </div>
+              </div>
               <div class="app-meta">
                 <span>{{ formatDate(app.applied_at) }}</span>
               </div>
@@ -439,6 +551,20 @@ onMounted(() => {
                   @click="viewMessages(app)"
                 >
                   消息
+                </button>
+                <button 
+                  v-if="app.status === 'offered'" 
+                  class="btn btn-success btn-sm" 
+                  @click="handleAcceptOffer(app.id)"
+                >
+                  接受Offer
+                </button>
+                <button 
+                  v-if="app.status === 'offered'" 
+                  class="btn btn-danger btn-sm" 
+                  @click="handleRejectOffer(app.id)"
+                >
+                  拒绝Offer
                 </button>
               </div>
             </div>
@@ -545,6 +671,7 @@ onMounted(() => {
           @close="showCandidateDetail = false"
           @view-message="viewMessages"
           @update-status="handleUpdateStatus"
+          @send-offer="handleSendOffer"
         />
       </div>
     </div>
@@ -698,6 +825,18 @@ onMounted(() => {
 .app-actions {
   display: flex;
   gap: 8px;
+}
+
+.app-offer {
+  margin-right: 16px;
+}
+
+.offer-info {
+  font-size: 12px;
+  color: #67c23a;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .filter-bar {

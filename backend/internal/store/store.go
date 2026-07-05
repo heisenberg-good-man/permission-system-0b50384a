@@ -323,8 +323,74 @@ func UpdateApplicationStatus(id string, status string) bool {
 	}
 	app.Status = status
 	app.UpdatedAt = time.Now()
+	app.LastActivity = time.Now()
 	app.StatusHistory = append(app.StatusHistory, model.StatusHistory{
 		Status:    status,
+		ChangedAt: time.Now(),
+	})
+	applications[id] = app
+	return true
+}
+
+func SendOffer(id string, offer model.OfferDetail) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	app, ok := applications[id]
+	if !ok {
+		return false
+	}
+	app.Status = "offered"
+	app.OfferStatus = "sent"
+	app.OfferDetail = &offer
+	app.OfferDetail.SentAt = time.Now()
+	app.UpdatedAt = time.Now()
+	app.LastActivity = time.Now()
+	app.StatusHistory = append(app.StatusHistory, model.StatusHistory{
+		Status:    "offered",
+		ChangedAt: time.Now(),
+	})
+	applications[id] = app
+	return true
+}
+
+func AcceptOffer(id string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	app, ok := applications[id]
+	if !ok {
+		return false
+	}
+	if app.Status != "offered" || app.OfferStatus != "sent" {
+		return false
+	}
+	app.Status = "offer_accepted"
+	app.OfferStatus = "accepted"
+	app.UpdatedAt = time.Now()
+	app.LastActivity = time.Now()
+	app.StatusHistory = append(app.StatusHistory, model.StatusHistory{
+		Status:    "offer_accepted",
+		ChangedAt: time.Now(),
+	})
+	applications[id] = app
+	return true
+}
+
+func RejectOffer(id string) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	app, ok := applications[id]
+	if !ok {
+		return false
+	}
+	if app.Status != "offered" || app.OfferStatus != "sent" {
+		return false
+	}
+	app.Status = "rejected"
+	app.OfferStatus = "rejected"
+	app.UpdatedAt = time.Now()
+	app.LastActivity = time.Now()
+	app.StatusHistory = append(app.StatusHistory, model.StatusHistory{
+		Status:    "rejected",
 		ChangedAt: time.Now(),
 	})
 	applications[id] = app
@@ -374,6 +440,18 @@ func GetStats() model.Stats {
 		}
 		if app.Status == "communicating" {
 			stats.InCommunication++
+		}
+		if app.Status == "interviewing" {
+			stats.Interviewing++
+		}
+		if app.Status == "offered" || app.Status == "offer_accepted" {
+			stats.Offered++
+		}
+		if app.Status == "offer_accepted" {
+			stats.Accepted++
+		}
+		if app.Status == "rejected" {
+			stats.Rejected++
 		}
 	}
 	return stats

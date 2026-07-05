@@ -24,6 +24,7 @@ function getStatusText(status: string): string {
     communicating: '沟通中',
     interviewing: '面试中',
     offered: '已发offer',
+    offer_accepted: '已接受offer',
     rejected: '已拒绝'
   }
   return map[status] || status
@@ -65,6 +66,7 @@ function getStatusText(status: string): string {
                 <option value="communicating">沟通中</option>
                 <option value="interviewing">面试中</option>
                 <option value="offered">已发offer</option>
+                <option value="offer_accepted">已接受offer</option>
                 <option value="rejected">已拒绝</option>
               </select>
             </div>

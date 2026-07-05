@@ -30,6 +30,14 @@ export interface StatusHistory {
   changed_at: string
 }
 
+export interface OfferDetail {
+  offer_salary_min: number
+  offer_salary_max: number
+  start_date: string
+  remarks: string
+  sent_at?: string
+}
+
 export interface Application {
   id: string
   job_id: string
@@ -38,6 +46,9 @@ export interface Application {
   applied_at: string
   updated_at: string
   status_history?: StatusHistory[]
+  offer_status?: string
+  offer_detail?: OfferDetail
+  last_activity?: string
 }
 
 export interface Message {
@@ -54,6 +65,10 @@ export interface Stats {
   today_applications: number
   pending_review: number
   in_communication: number
+  interviewing: number
+  offered: number
+  accepted: number
+  rejected: number
 }
 
 export type Role = 'candidate' | 'recruiter'

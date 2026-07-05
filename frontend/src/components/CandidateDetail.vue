@@ -8,11 +8,27 @@ const props = defineProps<{
   jobs: Map<string, Job>
 }>()
 
+import { ref } from 'vue'
+
 const emit = defineEmits<{
   close: []
   viewMessage: [application: Application]
   updateStatus: [applicationId: string, status: string]
+  sendOffer: [applicationId: string, offerData: {
+    offer_salary_min: number
+    offer_salary_max: number
+    start_date: string
+    remarks?: string
+  }]
 }>()
+
+const showOfferForm = ref<string | null>(null)
+const offerForm = ref({
+  offer_salary_min: 0,
+  offer_salary_max: 0,
+  start_date: '',
+  remarks: ''
+})
 
 function formatDate(dateStr: string): string {
   const date = new Date(dateStr)
@@ -25,9 +41,41 @@ function getStatusText(status: string): string {
     communicating: '沟通中',
     interviewing: '面试中',
     offered: '已发offer',
+    offer_accepted: '已接受offer',
     rejected: '已拒绝'
   }
   return map[status] || status
+}
+
+function canSendOffer(status: string): boolean {
+  return status === 'interviewing' || status === 'communicating' || status === 'pending'
+}
+
+function openOfferForm(appId: string) {
+  showOfferForm.value = appId
+  offerForm.value = {
+    offer_salary_min: 0,
+    offer_salary_max: 0,
+    start_date: '',
+    remarks: ''
+  }
+}
+
+function submitOffer(appId: string) {
+  if (offerForm.value.offer_salary_min <= 0 || offerForm.value.offer_salary_max <= 0) {
+    alert('薪资范围为必填项')
+    return
+  }
+  if (!offerForm.value.start_date) {
+    alert('到岗时间为必填项')
+    return
+  }
+  emit('sendOffer', appId, { ...offerForm.value })
+  showOfferForm.value = null
+}
+
+function cancelOffer() {
+  showOfferForm.value = null
 }
 
 function getStatusHistoryText(history: StatusHistory[]): string {
@@ -104,6 +152,13 @@ const candidateApplications = computed(() => {
             >
               消息
             </button>
+            <button 
+              v-if="canSendOffer(app.status)" 
+              class="btn btn-success btn-sm" 
+              @click="openOfferForm(app.id)"
+            >
+              发送Offer
+            </button>
             <select class="status-select" @change="(e) => emit('updateStatus', app.id, (e.target as HTMLSelectElement).value)">
               <option :value="app.status" disabled>{{ getStatusText(app.status) }}</option>
               <option value="pending">待筛选</option>
@@ -112,6 +167,36 @@ const candidateApplications = computed(() => {
               <option value="offered">已发offer</option>
               <option value="rejected">已拒绝</option>
             </select>
+          </div>
+        </div>
+
+        <div v-if="showOfferForm" class="offer-form">
+          <div class="section-title">发送Offer</div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>薪资范围（最低）：</label>
+              <input v-model.number="offerForm.offer_salary_min" type="number" class="form-input" placeholder="请输入最低薪资" />
+            </div>
+            <div class="form-group">
+              <label>薪资范围（最高）：</label>
+              <input v-model.number="offerForm.offer_salary_max" type="number" class="form-input" placeholder="请输入最高薪资" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>到岗时间：</label>
+              <input v-model="offerForm.start_date" type="date" class="form-input" />
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label>备注：</label>
+              <textarea v-model="offerForm.remarks" class="form-input" rows="3" placeholder="请输入备注信息"></textarea>
+            </div>
+          </div>
+          <div class="form-actions">
+            <button class="btn btn-primary" @click="submitOffer(showOfferForm)">发送Offer</button>
+            <button class="btn btn-outline" @click="cancelOffer">取消</button>
           </div>
         </div>
       </div>
@@ -244,5 +329,60 @@ const candidateApplications = computed(() => {
   text-align: center;
   padding: 20px;
   color: #999;
+}
+
+.offer-form {
+  margin-top: 16px;
+  padding: 16px;
+  background-color: #fafafa;
+  border-radius: 8px;
+  border: 1px solid #f0f0f0;
+}
+
+.form-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.form-group {
+  flex: 1;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  color: #666;
+  margin-bottom: 4px;
+}
+
+.form-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+.form-input:focus {
+  outline: none;
+  border-color: #409eff;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.btn-success {
+  background-color: #67c23a;
+  color: white;
+  border: none;
+}
+
+.btn-success:hover {
+  background-color: #5eb838;
 }
 </style>

@@ -22,6 +22,7 @@ function getStatusText(status: string): string {
   const map: Record<string, string> = {
     pending: '待筛选',
     communicating: '沟通中',
+    interviewing: '面试中',
     offered: '已发offer',
     rejected: '已拒绝'
   }
@@ -62,6 +63,7 @@ function getStatusText(status: string): string {
                 <option :value="app.status" disabled>{{ getStatusText(app.status) }}</option>
                 <option value="pending">待筛选</option>
                 <option value="communicating">沟通中</option>
+                <option value="interviewing">面试中</option>
                 <option value="offered">已发offer</option>
                 <option value="rejected">已拒绝</option>
               </select>

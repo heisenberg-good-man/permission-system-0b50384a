@@ -3,7 +3,6 @@ import { ref, computed, onMounted } from 'vue'
 import type { Job, Candidate, Application, Message, Stats, Role } from '@/types'
 import {
   getJobs,
-  getJob,
   createJob,
   updateJob,
   deleteJob,
@@ -86,6 +85,12 @@ const messages = ref<Message[]>([])
 const searchKeyword = ref('')
 const filterLocation = ref('')
 
+const recruiterFilter = ref({
+  jobId: '',
+  status: '',
+  keyword: ''
+})
+
 const toast = ref<{ show: boolean; type: 'success' | 'error'; message: string }>({
   show: false,
   type: 'success',
@@ -150,8 +155,50 @@ const filteredJobs = computed(() => {
   return result
 })
 
+const myApplications = computed(() => {
+  if (!currentCandidate.value.id) return []
+  return applications.value.filter(a => a.candidate_id === currentCandidate.value.id)
+})
+
+const filteredApplications = computed(() => {
+  let result = applications.value
+  if (recruiterFilter.value.jobId) {
+    result = result.filter(a => a.job_id === recruiterFilter.value.jobId)
+  }
+  if (recruiterFilter.value.status) {
+    result = result.filter(a => a.status === recruiterFilter.value.status)
+  }
+  if (recruiterFilter.value.keyword) {
+    const keyword = recruiterFilter.value.keyword.toLowerCase()
+    result = result.filter(a => {
+      const candidate = candidatesMap.value.get(a.candidate_id)
+      const job = jobsMap.value.get(a.job_id)
+      return (candidate?.name.toLowerCase().includes(keyword) ||
+        candidate?.email.toLowerCase().includes(keyword) ||
+        job?.title.toLowerCase().includes(keyword))
+    })
+  }
+  return result
+})
+
 function switchRole(role: Role) {
   currentRole.value = role
+}
+
+function getStatusText(status: string): string {
+  const map: Record<string, string> = {
+    pending: '待筛选',
+    communicating: '沟通中',
+    interviewing: '面试中',
+    offered: '已发offer',
+    rejected: '已拒绝'
+  }
+  return map[status] || status
+}
+
+function formatDate(dateStr: string): string {
+  const date = new Date(dateStr)
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
 }
 
 function viewJobDetail(job: Job) {
@@ -366,6 +413,40 @@ onMounted(() => {
           </div>
           <JobList :jobs="filteredJobs" @view-detail="viewJobDetail" />
         </div>
+
+        <div class="card">
+          <div class="card-header">
+            <h2>我的投递</h2>
+          </div>
+          <div class="my-applications">
+            <div v-for="app in myApplications" :key="app.id" class="application-item">
+              <div class="app-info">
+                <div class="app-job-title">{{ jobsMap.get(app.job_id)?.title || '-' }}</div>
+                <div class="app-company">{{ jobsMap.get(app.job_id)?.company || '-' }}</div>
+              </div>
+              <div class="app-status">
+                <span class="badge" :class="`badge-${app.status}`">
+                  {{ getStatusText(app.status) }}
+                </span>
+              </div>
+              <div class="app-meta">
+                <span>{{ formatDate(app.applied_at) }}</span>
+              </div>
+              <div class="app-actions">
+                <button 
+                  v-if="app.status === 'communicating'" 
+                  class="btn btn-primary btn-sm" 
+                  @click="viewMessages(app)"
+                >
+                  消息
+                </button>
+              </div>
+            </div>
+            <div v-if="myApplications.length === 0" class="empty-state">
+              暂无投递记录，快去投递心仪的职位吧！
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-else class="recruiter-section">
@@ -385,9 +466,40 @@ onMounted(() => {
         </div>
 
         <div class="card">
-          <h2>投递列表</h2>
+          <div class="card-header">
+            <h2>投递列表</h2>
+          </div>
+          <div class="filter-bar">
+            <input 
+              v-model="recruiterFilter.keyword" 
+              type="text" 
+              class="form-input" 
+              placeholder="搜索候选人姓名、邮箱或职位"
+              style="width: 200px;"
+            />
+            <select 
+              v-model="recruiterFilter.jobId" 
+              class="form-select"
+              style="width: 150px;"
+            >
+              <option value="">全部职位</option>
+              <option v-for="job in jobs" :key="job.id" :value="job.id">{{ job.title }}</option>
+            </select>
+            <select 
+              v-model="recruiterFilter.status" 
+              class="form-select"
+              style="width: 120px;"
+            >
+              <option value="">全部状态</option>
+              <option value="pending">待筛选</option>
+              <option value="communicating">沟通中</option>
+              <option value="interviewing">面试中</option>
+              <option value="offered">已发offer</option>
+              <option value="rejected">已拒绝</option>
+            </select>
+          </div>
           <ApplicationList
-            :applications="applications"
+            :applications="filteredApplications"
             :candidates="candidatesMap"
             :jobs="jobsMap"
             @view-candidate="viewCandidate"
@@ -425,8 +537,15 @@ onMounted(() => {
     </div>
 
     <div v-if="showCandidateDetail" class="modal-overlay" @click.self="showCandidateDetail = false">
-      <div class="modal">
-        <CandidateDetail :candidate="selectedCandidate" @close="showCandidateDetail = false" />
+      <div class="modal" style="max-width: 900px;">
+        <CandidateDetail 
+          :candidate="selectedCandidate" 
+          :applications="applications"
+          :jobs="jobsMap"
+          @close="showCandidateDetail = false"
+          @view-message="viewMessages"
+          @update-status="handleUpdateStatus"
+        />
       </div>
     </div>
 
@@ -535,5 +654,57 @@ onMounted(() => {
 .candidate-section,
 .recruiter-section {
   max-width: 100%;
+}
+
+.my-applications {
+  margin-top: 16px;
+}
+
+.application-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border: 1px solid #f0f0f0;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.app-info {
+  flex: 1;
+}
+
+.app-job-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.app-company {
+  font-size: 12px;
+  color: #999;
+  margin-top: 4px;
+}
+
+.app-status {
+  margin-right: 16px;
+}
+
+.app-meta {
+  font-size: 12px;
+  color: #999;
+  margin-right: 16px;
+}
+
+.app-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f0f0f0;
 }
 </style>

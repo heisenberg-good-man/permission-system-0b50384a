@@ -49,9 +49,10 @@ export async function updateCandidate(id: string, candidate: Partial<Candidate>)
   await api.put(`/candidates/${id}`, candidate)
 }
 
-export async function getApplications(jobId?: string, status?: string): Promise<Application[]> {
+export async function getApplications(jobId?: string, candidateId?: string, status?: string): Promise<Application[]> {
   const params: Record<string, string> = {}
   if (jobId) params.job_id = jobId
+  if (candidateId) params.candidate_id = candidateId
   if (status) params.status = status
   const response = await api.get('/applications', { params })
   return response.data.data

@@ -107,6 +107,10 @@ func InitMockData() {
 		Status:      "communicating",
 		AppliedAt:   now.Add(-6 * time.Hour),
 		UpdatedAt:   now.Add(-2 * time.Hour),
+		StatusHistory: []model.StatusHistory{
+			{Status: "pending", ChangedAt: now.Add(-6 * time.Hour)},
+			{Status: "communicating", ChangedAt: now.Add(-4 * time.Hour)},
+		},
 	}
 
 	messages["msg-1"] = model.Message{
@@ -274,6 +278,9 @@ func CreateApplication(app model.Application) (string, error) {
 	app.Status = "pending"
 	app.AppliedAt = time.Now()
 	app.UpdatedAt = time.Now()
+	app.StatusHistory = []model.StatusHistory{
+		{Status: "pending", ChangedAt: time.Now()},
+	}
 	applications[app.ID] = app
 	return app.ID, nil
 }
@@ -285,12 +292,15 @@ func GetApplication(id string) (model.Application, bool) {
 	return app, ok
 }
 
-func ListApplications(jobID, status string) []model.Application {
+func ListApplications(jobID, candidateID, status string) []model.Application {
 	mu.RLock()
 	defer mu.RUnlock()
 	var result []model.Application
 	for _, app := range applications {
 		if jobID != "" && app.JobID != jobID {
+			continue
+		}
+		if candidateID != "" && app.CandidateID != candidateID {
 			continue
 		}
 		if status != "" && app.Status != status {
@@ -308,8 +318,15 @@ func UpdateApplicationStatus(id string, status string) bool {
 	if !ok {
 		return false
 	}
+	if app.Status == status {
+		return true
+	}
 	app.Status = status
 	app.UpdatedAt = time.Now()
+	app.StatusHistory = append(app.StatusHistory, model.StatusHistory{
+		Status:    status,
+		ChangedAt: time.Now(),
+	})
 	applications[id] = app
 	return true
 }

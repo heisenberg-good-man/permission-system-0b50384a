@@ -25,6 +25,11 @@ export interface Candidate {
   created_at: string
 }
 
+export interface StatusHistory {
+  status: string
+  changed_at: string
+}
+
 export interface Application {
   id: string
   job_id: string
@@ -32,6 +37,7 @@ export interface Application {
   status: string
   applied_at: string
   updated_at: string
+  status_history?: StatusHistory[]
 }
 
 export interface Message {

@@ -29,13 +29,19 @@ type Candidate struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
+type StatusHistory struct {
+	Status    string    `json:"status"`
+	ChangedAt time.Time `json:"changed_at"`
+}
+
 type Application struct {
-	ID          string    `json:"id"`
-	JobID       string    `json:"job_id"`
-	CandidateID string    `json:"candidate_id"`
-	Status      string    `json:"status"`
-	AppliedAt   time.Time `json:"applied_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID            string          `json:"id"`
+	JobID         string          `json:"job_id"`
+	CandidateID   string          `json:"candidate_id"`
+	Status        string          `json:"status"`
+	AppliedAt     time.Time       `json:"applied_at"`
+	UpdatedAt     time.Time       `json:"updated_at"`
+	StatusHistory []StatusHistory `json:"status_history"`
 }
 
 type Message struct {

@@ -20,8 +20,9 @@ func RegisterApplicationRoutes(api *gin.RouterGroup) {
 
 func ListApplications(c *gin.Context) {
 	jobID := c.Query("job_id")
+	candidateID := c.Query("candidate_id")
 	status := c.Query("status")
-	apps := store.ListApplications(jobID, status)
+	apps := store.ListApplications(jobID, candidateID, status)
 	c.JSON(http.StatusOK, gin.H{"data": apps})
 }
 

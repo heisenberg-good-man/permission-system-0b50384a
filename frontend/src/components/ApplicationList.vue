@@ -6,7 +6,9 @@ import {
   getStatusText,
   getStatusBadgeClass,
   canSendOffer,
-  canViewMessages
+  canViewMessages,
+  NORMAL_STATUS_OPTIONS,
+  isOfferStatus
 } from '@/utils/status'
 
 defineProps<{
@@ -22,13 +24,7 @@ const emit = defineEmits<{
   sendOffer: [applicationId: string]
 }>()
 
-const STATUS_OPTIONS = [
-  { value: 'pending', label: '待筛选' },
-  { value: 'communicating', label: '沟通中' },
-  { value: 'interviewing', label: '面试中' },
-  { value: 'offered', label: '已发offer' },
-  { value: 'rejected', label: '已拒绝' }
-]
+const STATUS_OPTIONS = NORMAL_STATUS_OPTIONS
 </script>
 
 <template>
@@ -82,8 +78,10 @@ const STATUS_OPTIONS = [
                 发送Offer
               </button>
               <select
-                :value="app.status"
+                :value="isOfferStatus(app.status) ? '' : app.status"
                 class="status-select"
+                :disabled="isOfferStatus(app.status)"
+                :title="isOfferStatus(app.status) ? 'Offer 状态下不可直接切换，请通过 Offer 入口操作' : ''"
                 @change="(e) => emit('updateStatus', app.id, (e.target as HTMLSelectElement).value)"
               >
                 <option value="" disabled>切换状态</option>

@@ -7,7 +7,9 @@ import {
   getStatusBadgeClass,
   getStatusHistoryText,
   canSendOffer,
-  canViewMessages
+  canViewMessages,
+  NORMAL_STATUS_OPTIONS,
+  isOfferStatus
 } from '@/utils/status'
 
 const props = defineProps<{
@@ -37,14 +39,9 @@ const offerForm = ref({
   remarks: ''
 })
 const offerError = ref('')
+const offerSubmitting = ref(false)
 
-const STATUS_OPTIONS = [
-  { value: 'pending', label: '待筛选' },
-  { value: 'communicating', label: '沟通中' },
-  { value: 'interviewing', label: '面试中' },
-  { value: 'offered', label: '已发offer' },
-  { value: 'rejected', label: '已拒绝' }
-]
+const STATUS_OPTIONS = NORMAL_STATUS_OPTIONS
 
 const candidateApplications = computed(() => {
   if (!props.candidate) return []
@@ -78,6 +75,7 @@ watch(
 )
 
 function submitOffer(appId: string) {
+  if (offerSubmitting.value) return
   if (offerForm.value.offer_salary_min <= 0 || offerForm.value.offer_salary_max <= 0) {
     offerError.value = '薪资范围为必填项'
     return
@@ -91,14 +89,28 @@ function submitOffer(appId: string) {
     return
   }
   offerError.value = ''
+  offerSubmitting.value = true
   emit('sendOffer', appId, { ...offerForm.value })
-  showOfferForm.value = null
 }
 
 function cancelOffer() {
   showOfferForm.value = null
   offerError.value = ''
+  offerSubmitting.value = false
 }
+
+function setOfferError(message: string) {
+  offerError.value = message
+  offerSubmitting.value = false
+}
+
+function closeOfferForm() {
+  showOfferForm.value = null
+  offerError.value = ''
+  offerSubmitting.value = false
+}
+
+defineExpose({ closeOfferForm, setOfferError })
 
 function isOfferVisible(app: Application): boolean {
   return (app.status === 'offered' || app.status === 'offer_accepted') && !!app.offer_detail
@@ -179,8 +191,10 @@ function isOfferVisible(app: Application): boolean {
                 发送Offer
               </button>
               <select
-                :value="app.status"
+                :value="isOfferStatus(app.status) ? '' : app.status"
                 class="status-select"
+                :disabled="isOfferStatus(app.status)"
+                :title="isOfferStatus(app.status) ? 'Offer 状态下不可直接切换，请通过 Offer 入口操作' : ''"
                 @change="(e) => emit('updateStatus', app.id, (e.target as HTMLSelectElement).value)"
               >
                 <option value="" disabled>{{ getStatusText(app.status) }}</option>
@@ -225,8 +239,10 @@ function isOfferVisible(app: Application): boolean {
             </div>
             <div v-if="offerError" class="error-message">{{ offerError }}</div>
             <div class="form-actions">
-              <button class="btn btn-primary" @click="submitOffer(app.id)">发送Offer</button>
-              <button class="btn btn-outline" @click="cancelOffer">取消</button>
+              <button class="btn btn-primary" :disabled="offerSubmitting" @click="submitOffer(app.id)">
+                {{ offerSubmitting ? '发送中...' : '发送Offer' }}
+              </button>
+              <button class="btn btn-outline" :disabled="offerSubmitting" @click="cancelOffer">取消</button>
             </div>
           </div>
         </div>

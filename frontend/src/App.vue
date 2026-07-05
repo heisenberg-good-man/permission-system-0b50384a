@@ -86,6 +86,7 @@ const editingJob = ref<Job | null>(null)
 const showCandidateDetail = ref(false)
 const selectedCandidate = ref<Candidate | null>(null)
 const pendingOfferAppId = ref<string>('')
+const candidateDetailRef = ref<InstanceType<typeof CandidateDetail> | null>(null)
 
 const showMessagePanel = ref(false)
 const currentApplication = ref<Application | null>(null)
@@ -376,7 +377,6 @@ async function handleSendOffer(applicationId: string, offerData: {
   start_date: string
   remarks?: string
 }) {
-  actionLoading.value = true
   try {
     await sendOffer(applicationId, offerData)
     showToast('success', 'Offer 发送成功')
@@ -393,11 +393,11 @@ async function handleSendOffer(applicationId: string, offerData: {
       loadMessages(applicationId)
     }
     pendingOfferAppId.value = ''
+    candidateDetailRef.value?.closeOfferForm()
   } catch (error: any) {
     const errorMsg = error.response?.data?.error || 'Offer 发送失败'
+    candidateDetailRef.value?.setOfferError(errorMsg)
     showToast('error', errorMsg)
-  } finally {
-    actionLoading.value = false
   }
 }
 
@@ -724,6 +724,7 @@ onMounted(() => {
     <div v-if="showCandidateDetail" class="modal-overlay" @click.self="showCandidateDetail = false">
       <div class="modal" style="max-width: 900px;">
         <CandidateDetail
+          ref="candidateDetailRef"
           :candidate="selectedCandidate"
           :applications="applications"
           :jobs="jobsMap"

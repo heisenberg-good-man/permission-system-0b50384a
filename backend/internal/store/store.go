@@ -311,15 +311,18 @@ func ListApplications(jobID, candidateID, status string) []model.Application {
 	return result
 }
 
-func UpdateApplicationStatus(id string, status string) bool {
+func UpdateApplicationStatus(id string, status string) error {
 	mu.Lock()
 	defer mu.Unlock()
 	app, ok := applications[id]
 	if !ok {
-		return false
+		return ErrNotFound
+	}
+	if !normalStatuses[status] {
+		return ErrInvalidStatus
 	}
 	if app.Status == status {
-		return true
+		return nil
 	}
 	app.Status = status
 	app.UpdatedAt = time.Now()
@@ -329,7 +332,7 @@ func UpdateApplicationStatus(id string, status string) bool {
 		ChangedAt: time.Now(),
 	})
 	applications[id] = app
-	return true
+	return nil
 }
 
 func SendOffer(id string, offer model.OfferDetail) bool {
@@ -461,7 +464,20 @@ var (
 	ErrDuplicateApplication = &StoreError{"已投递该职位"}
 	ErrJobNotFound          = &StoreError{"职位不存在"}
 	ErrJobClosed            = &StoreError{"职位已关闭"}
+	ErrInvalidStatus        = &StoreError{"状态不合法，请通过对应入口操作"}
+	ErrNotFound             = &StoreError{"记录不存在"}
 )
+
+var normalStatuses = map[string]bool{
+	"pending":       true,
+	"communicating": true,
+	"interviewing":  true,
+	"rejected":      true,
+}
+
+func IsNormalStatus(status string) bool {
+	return normalStatuses[status]
+}
 
 type StoreError struct {
 	Message string

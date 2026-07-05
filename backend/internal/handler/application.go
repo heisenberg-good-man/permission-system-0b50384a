@@ -74,8 +74,15 @@ func UpdateApplicationStatus(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	if !store.UpdateApplicationStatus(id, req.Status) {
-		c.JSON(http.StatusNotFound, gin.H{"error": "投递记录不存在"})
+	err := store.UpdateApplicationStatus(id, req.Status)
+	if err != nil {
+		if err == store.ErrNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "投递记录不存在"})
+		} else if err == store.ErrInvalidStatus {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		} else {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		}
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "状态更新成功"})

@@ -17,6 +17,17 @@ export function getStatusBadgeClass(status: string): string {
   return `badge-${status}`
 }
 
+export const NORMAL_STATUS_OPTIONS = [
+  { value: 'pending', label: '待筛选' },
+  { value: 'communicating', label: '沟通中' },
+  { value: 'interviewing', label: '面试中' },
+  { value: 'rejected', label: '已拒绝' }
+] as const
+
+export function isOfferStatus(status: string): boolean {
+  return status === 'offered' || status === 'offer_accepted'
+}
+
 export function canSendOffer(status: string): boolean {
   return status === 'pending' || status === 'communicating' || status === 'interviewing'
 }

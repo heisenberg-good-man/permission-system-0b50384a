@@ -216,6 +216,42 @@ func UpdateCandidate(id string, candidate model.Candidate) bool {
 	return true
 }
 
+func UpdateCandidatePartial(id string, updates map[string]interface{}) bool {
+	mu.Lock()
+	defer mu.Unlock()
+	candidate, ok := candidates[id]
+	if !ok {
+		return false
+	}
+	if val, ok := updates["name"]; ok {
+		candidate.Name = val.(string)
+	}
+	if val, ok := updates["email"]; ok {
+		candidate.Email = val.(string)
+	}
+	if val, ok := updates["phone"]; ok {
+		candidate.Phone = val.(string)
+	}
+	if val, ok := updates["resume_summary"]; ok {
+		candidate.ResumeSummary = val.(string)
+	}
+	if val, ok := updates["experience"]; ok {
+		candidate.Experience = val.(int)
+	}
+	if val, ok := updates["education"]; ok {
+		candidate.Education = val.(string)
+	}
+	if val, ok := updates["skills"]; ok {
+		skills, _ := val.([]interface{})
+		candidate.Skills = make([]string, len(skills))
+		for i, s := range skills {
+			candidate.Skills[i] = s.(string)
+		}
+	}
+	candidates[id] = candidate
+	return true
+}
+
 func CreateApplication(app model.Application) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()

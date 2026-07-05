@@ -2,14 +2,17 @@
 import { ref } from 'vue'
 import type { Job, Candidate } from '@/types'
 
-defineProps<{
+const props = defineProps<{
   job: Job | null
   currentCandidate: Candidate | null
+  isRecruiter?: boolean
 }>()
 
 const emit = defineEmits<{
   close: []
-  apply: [jobId: string]
+  apply: [jobId: string, resumeSummary: string]
+  edit: [job: Job]
+  delete: [jobId: string]
 }>()
 
 const showApplyForm = ref(false)
@@ -20,8 +23,8 @@ function formatSalary(min: number, max: number): string {
 }
 
 function handleApply() {
-  if (resumeSummary.value.trim()) {
-    emit('apply', '')
+  if (resumeSummary.value.trim() && props.job) {
+    emit('apply', props.job.id, resumeSummary.value)
     showApplyForm.value = false
     resumeSummary.value = ''
   }
@@ -41,7 +44,13 @@ function handleApply() {
           <span>{{ formatSalary(job.salary_min, job.salary_max) }}</span>
         </div>
       </div>
-      <button class="modal-close" @click="emit('close')">&times;</button>
+      <div class="header-actions">
+        <div v-if="isRecruiter" class="action-buttons">
+          <button class="btn btn-outline btn-sm" @click="emit('edit', job)">编辑</button>
+          <button class="btn btn-danger btn-sm" @click="emit('delete', job.id)">删除</button>
+        </div>
+        <button class="modal-close" @click="emit('close')">&times;</button>
+      </div>
     </div>
     
     <div class="detail-body">
@@ -61,7 +70,7 @@ function handleApply() {
       </div>
     </div>
     
-    <div class="detail-footer">
+    <div class="detail-footer" v-if="!isRecruiter">
       <button
         v-if="job.status === 'open'"
         class="btn btn-primary"
@@ -72,7 +81,7 @@ function handleApply() {
       <span v-else class="text-gray">该职位已关闭，无法投递</span>
     </div>
     
-    <div v-if="showApplyForm && job.status === 'open'" class="apply-form">
+    <div v-if="showApplyForm && job.status === 'open' && !isRecruiter" class="apply-form">
       <h3>填写简历摘要</h3>
       <textarea
         v-model="resumeSummary"
@@ -97,6 +106,22 @@ function handleApply() {
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 24px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.action-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 12px;
 }
 
 .job-meta {

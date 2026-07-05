@@ -49,12 +49,12 @@ func CreateCandidate(c *gin.Context) {
 
 func UpdateCandidate(c *gin.Context) {
 	id := c.Param("id")
-	var candidate model.Candidate
-	if err := c.ShouldBindJSON(&candidate); err != nil {
+	var updates map[string]interface{}
+	if err := c.ShouldBindJSON(&updates); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "参数错误"})
 		return
 	}
-	if !store.UpdateCandidate(id, candidate) {
+	if !store.UpdateCandidatePartial(id, updates) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "候选人不存在"})
 		return
 	}

@@ -159,21 +159,24 @@ function viewJobDetail(job: Job) {
   showJobDetail.value = true
 }
 
-function handleApply(jobId: string) {
+async function handleApply(jobId: string, resumeSummary: string) {
   if (!currentCandidate.value.id) {
     showToast('error', '请先完善简历信息')
     return
   }
-  createApplication({ job_id: jobId, candidate_id: currentCandidate.value.id })
-    .then(() => {
-      showToast('success', '投递成功')
-      showJobDetail.value = false
-      loadData()
-    })
-    .catch((error: { response?: { data?: { error?: string } } }) => {
-      const errorMsg = error.response?.data?.error || '投递失败'
-      showToast('error', errorMsg)
-    })
+  try {
+    if (resumeSummary.trim()) {
+      currentCandidate.value.resume_summary = resumeSummary
+      await updateCandidate(currentCandidate.value.id, { resume_summary: resumeSummary })
+    }
+    await createApplication({ job_id: jobId, candidate_id: currentCandidate.value.id })
+    showToast('success', '投递成功')
+    showJobDetail.value = false
+    loadData()
+  } catch (error: any) {
+    const errorMsg = error.response?.data?.error || '投递失败'
+    showToast('error', errorMsg)
+  }
 }
 
 function openJobForm(job?: Job | null) {
@@ -371,7 +374,14 @@ onMounted(() => {
             <h2>职位管理</h2>
             <button class="btn btn-primary" @click="openJobForm()">发布新职位</button>
           </div>
-          <JobList :jobs="filteredJobs" :show-status="true" @view-detail="viewJobDetail" />
+          <JobList 
+          :jobs="filteredJobs" 
+          :show-status="true" 
+          :show-actions="true"
+          @view-detail="viewJobDetail"
+          @edit="openJobForm"
+          @delete="handleDeleteJob"
+        />
         </div>
 
         <div class="card">
@@ -393,8 +403,11 @@ onMounted(() => {
         <JobDetail
           :job="selectedJob"
           :current-candidate="currentCandidate"
+          :is-recruiter="currentRole === 'recruiter'"
           @close="showJobDetail = false"
-          @apply="handleApply(selectedJob!.id)"
+          @apply="handleApply"
+          @edit="(job) => { showJobDetail = false; openJobForm(job) }"
+          @delete="(jobId) => { showJobDetail = false; handleDeleteJob(jobId) }"
         />
       </div>
     </div>

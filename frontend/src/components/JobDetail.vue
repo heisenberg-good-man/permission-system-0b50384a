@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import type { Job, Candidate } from '@/types'
+import { formatSalary } from '@/utils/status'
 
 const props = defineProps<{
   job: Job | null
@@ -17,15 +18,23 @@ const emit = defineEmits<{
 
 const showApplyForm = ref(false)
 const resumeSummary = ref('')
-
-function formatSalary(min: number, max: number): string {
-  return `${(min / 10000).toFixed(1)}K - ${(max / 10000).toFixed(1)}K`
-}
+const applyError = ref('')
 
 function handleApply() {
-  if (props.job) {
-    emit('apply', props.job.id, resumeSummary.value)
-    showApplyForm.value = false
+  if (!props.job) return
+  const summary = resumeSummary.value.trim()
+  if (!summary) {
+    applyError.value = '请填写简历摘要后再投递'
+    return
+  }
+  applyError.value = ''
+  emit('apply', props.job.id, summary)
+}
+
+function toggleApplyForm() {
+  showApplyForm.value = !showApplyForm.value
+  if (!showApplyForm.value) {
+    applyError.value = ''
     resumeSummary.value = ''
   }
 }
@@ -52,35 +61,35 @@ function handleApply() {
         <button class="modal-close" @click="emit('close')">&times;</button>
       </div>
     </div>
-    
+
     <div class="detail-body">
       <div class="detail-section">
         <h3>职位描述</h3>
         <p>{{ job.description }}</p>
       </div>
-      
+
       <div class="detail-section">
         <h3>任职要求</h3>
         <p>{{ job.requirements }}</p>
       </div>
-      
+
       <div class="detail-section">
         <h3>职位状态</h3>
         <span class="badge" :class="`badge-${job.status}`">{{ job.status === 'open' ? '开放' : '已关闭' }}</span>
       </div>
     </div>
-    
+
     <div class="detail-footer" v-if="!isRecruiter">
       <button
         v-if="job.status === 'open'"
         class="btn btn-primary"
-        @click="showApplyForm = !showApplyForm"
+        @click="toggleApplyForm"
       >
-        {{ showApplyForm ? '取消投递' : '立即投递' }}
+        {{ showApplyForm ? '收起投递' : '立即投递' }}
       </button>
       <span v-else class="text-gray">该职位已关闭，无法投递</span>
     </div>
-    
+
     <div v-if="showApplyForm && job.status === 'open' && !isRecruiter" class="apply-form">
       <h3>填写简历摘要</h3>
       <textarea
@@ -88,8 +97,9 @@ function handleApply() {
         class="form-textarea"
         placeholder="请简要介绍您的工作经历、技能特长等..."
       ></textarea>
+      <div v-if="applyError" class="error-message">{{ applyError }}</div>
       <div class="flex justify-end gap-2 mt-4">
-        <button class="btn btn-outline" @click="showApplyForm = false">取消</button>
+        <button class="btn btn-outline" @click="toggleApplyForm">取消</button>
         <button class="btn btn-success" @click="handleApply">确认投递</button>
       </div>
     </div>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Job } from '@/types'
+import { formatSalary, formatDate } from '@/utils/status'
 
 defineProps<{
   jobs: Job[]
@@ -12,22 +13,13 @@ const emit = defineEmits<{
   edit: [job: Job]
   delete: [jobId: string]
 }>()
-
-function formatSalary(min: number, max: number): string {
-  return `${(min / 10000).toFixed(1)}K - ${(max / 10000).toFixed(1)}K`
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return `${date.getMonth() + 1}/${date.getDate()}`
-}
 </script>
 
 <template>
   <div class="job-list">
-    <div v-for="job in jobs" :key="job.id" class="job-card">
+    <div v-for="job in jobs" :key="job.id" class="job-card" @click="emit('viewDetail', job)">
       <div class="job-header">
-        <div class="job-title" @click="emit('viewDetail', job)">{{ job.title }}</div>
+        <div class="job-title">{{ job.title }}</div>
         <div class="job-header-right">
           <div v-if="showActions" class="job-actions">
             <button class="btn btn-outline btn-sm" @click.stop="emit('edit', job)">编辑</button>
@@ -38,13 +30,16 @@ function formatDate(dateStr: string): string {
           </div>
         </div>
       </div>
-      <div class="job-company" @click="emit('viewDetail', job)">{{ job.company }}</div>
+      <div class="job-company">{{ job.company || '-' }}</div>
       <div class="job-meta">
-        <span class="meta-item">{{ job.location }}</span>
+        <span class="meta-item">{{ job.location || '地点未知' }}</span>
         <span class="meta-item">{{ formatSalary(job.salary_min, job.salary_max) }}</span>
         <span class="meta-item">{{ formatDate(job.created_at) }}</span>
       </div>
-      <div class="job-description" @click="emit('viewDetail', job)">{{ job.description }}</div>
+      <div class="job-description">{{ job.description }}</div>
+    </div>
+    <div v-if="jobs.length === 0" class="empty-state">
+      暂无符合条件的职位
     </div>
   </div>
 </template>
@@ -118,5 +113,18 @@ function formatDate(dateStr: string): string {
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+  background-color: #fafafa;
+  border-radius: 8px;
+}
+
+.btn-sm {
+  padding: 4px 8px;
+  font-size: 12px;
 }
 </style>

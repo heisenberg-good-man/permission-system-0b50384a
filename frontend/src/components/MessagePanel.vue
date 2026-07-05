@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, watch, nextTick } from 'vue'
 import type { Message, Application, Job, Candidate } from '@/types'
+import { formatTime, getStatusText, getStatusBadgeClass } from '@/utils/status'
 
 const props = defineProps<{
   messages: Message[]
   application: Application | null
   job: Job | null
   candidate: Candidate | null
+  disabled?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -24,12 +26,8 @@ watch(() => props.messages, async () => {
   }
 }, { deep: true })
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return `${date.getHours().toString().padStart(2, '0')}:${date.getMinutes().toString().padStart(2, '0')}`
-}
-
 function handleSend() {
+  if (props.disabled) return
   const content = messageInput.value.trim()
   if (content) {
     emit('send', content)
@@ -47,15 +45,18 @@ function isRecruiterMessage(senderType: string): boolean {
     <div class="panel-header">
       <div class="header-info">
         <div class="conversation-title">
-          {{ job?.title }} - {{ candidate?.name }}
+          {{ job?.title || '-' }} - {{ candidate?.name || '-' }}
         </div>
         <div class="conversation-status">
-          <span class="badge badge-communicating">沟通中</span>
+          <span v-if="application" class="badge" :class="getStatusBadgeClass(application.status)">
+            {{ getStatusText(application.status) }}
+          </span>
+          <span v-else class="text-gray">未选择投递</span>
         </div>
       </div>
       <button class="modal-close" @click="emit('close')">&times;</button>
     </div>
-    
+
     <div ref="messagesContainer" class="messages-container">
       <div
         v-for="msg in messages"
@@ -68,8 +69,8 @@ function isRecruiterMessage(senderType: string): boolean {
         </div>
         <div class="message-content">
           <div class="message-header">
-            <span class="sender-name">{{ isRecruiterMessage(msg.sender_type) ? '招聘方' : candidate?.name }}</span>
-            <span class="send-time">{{ formatDate(msg.sent_at) }}</span>
+            <span class="sender-name">{{ isRecruiterMessage(msg.sender_type) ? '招聘方' : candidate?.name || '候选人' }}</span>
+            <span class="send-time">{{ formatTime(msg.sent_at) }}</span>
           </div>
           <div class="message-text">{{ msg.content }}</div>
         </div>
@@ -78,16 +79,17 @@ function isRecruiterMessage(senderType: string): boolean {
         暂无消息，开始沟通吧！
       </div>
     </div>
-    
+
     <div class="message-input-area">
       <input
         v-model="messageInput"
         type="text"
         class="form-input message-input"
         placeholder="输入消息..."
+        :disabled="disabled"
         @keyup.enter="handleSend"
       />
-      <button class="btn btn-primary" @click="handleSend">发送</button>
+      <button class="btn btn-primary" :disabled="disabled" @click="handleSend">发送</button>
     </div>
   </div>
 </template>
@@ -208,5 +210,19 @@ function isRecruiterMessage(senderType: string): boolean {
 
 .message-input {
   flex: 1;
+}
+
+.message-input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.text-gray {
+  color: #999;
 }
 </style>

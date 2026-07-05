@@ -19,6 +19,7 @@ import {
   createMessage,
   getStats
 } from '@/api'
+import { formatDate, getStatusText, canViewMessages } from '@/utils/status'
 
 import RoleSwitcher from '@/components/RoleSwitcher.vue'
 import StatCard from '@/components/StatCard.vue'
@@ -34,7 +35,11 @@ const stats = ref<Stats>({
   open_jobs: 0,
   today_applications: 0,
   pending_review: 0,
-  in_communication: 0
+  in_communication: 0,
+  interviewing: 0,
+  offered: 0,
+  accepted: 0,
+  rejected: 0
 })
 
 const jobs = ref<Job[]>([])
@@ -80,6 +85,7 @@ const editingJob = ref<Job | null>(null)
 
 const showCandidateDetail = ref(false)
 const selectedCandidate = ref<Candidate | null>(null)
+const pendingOfferAppId = ref<string>('')
 
 const showMessagePanel = ref(false)
 const currentApplication = ref<Application | null>(null)
@@ -100,13 +106,16 @@ const toast = ref<{ show: boolean; type: 'success' | 'error'; message: string }>
   message: ''
 })
 
+let toastTimer: ReturnType<typeof setTimeout> | null = null
 const loading = ref(false)
+const actionLoading = ref(false)
 
 function showToast(type: 'success' | 'error', message: string) {
   toast.value = { show: true, type, message }
-  setTimeout(() => {
+  if (toastTimer) clearTimeout(toastTimer)
+  toastTimer = setTimeout(() => {
     toast.value.show = false
-  }, 3000)
+  }, type === 'error' ? 5000 : 2500)
 }
 
 async function loadData() {
@@ -122,11 +131,18 @@ async function loadData() {
     candidates.value = candidatesData
     applications.value = applicationsData
     stats.value = statsData
-    if (candidates.value.length > 0) {
+    if (currentCandidate.value.id) {
+      const updated = candidates.value.find(c => c.id === currentCandidate.value.id)
+      if (updated) currentCandidate.value = updated
+    } else if (candidates.value.length > 0) {
       currentCandidate.value = candidates.value[0]
     }
+    if (selectedCandidate.value) {
+      const refreshed = candidates.value.find(c => c.id === selectedCandidate.value!.id)
+      if (refreshed) selectedCandidate.value = refreshed
+    }
   } catch (error) {
-    showToast('error', '加载数据失败')
+    showToast('error', '加载数据失败，请检查后端服务是否启动')
   } finally {
     loading.value = false
   }
@@ -188,23 +204,6 @@ function switchRole(role: Role) {
   currentRole.value = role
 }
 
-function getStatusText(status: string): string {
-  const map: Record<string, string> = {
-    pending: '待筛选',
-    communicating: '沟通中',
-    interviewing: '面试中',
-    offered: '已发offer',
-    offer_accepted: '已接受offer',
-    rejected: '已拒绝'
-  }
-  return map[status] || status
-}
-
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-}
-
 function viewJobDetail(job: Job) {
   selectedJob.value = job
   showJobDetail.value = true
@@ -212,48 +211,42 @@ function viewJobDetail(job: Job) {
 
 async function handleApply(jobId: string, resumeSummary: string) {
   if (!currentCandidate.value.id) {
-    showToast('error', '请先完善简历信息')
+    showToast('error', '请先在「我的简历」保存简历后再投递')
     return
   }
-  
+
   const candidate = currentCandidate.value
   const errors: string[] = []
-  
-  if (!candidate.name.trim()) {
-    errors.push('姓名不能为空')
-  }
-  if (!candidate.email.trim()) {
-    errors.push('邮箱不能为空')
-  }
-  if (!candidate.phone.trim()) {
-    errors.push('电话不能为空')
-  }
-  if (!resumeSummary.trim()) {
-    errors.push('简历摘要不能为空')
-  }
-  
+
+  if (!candidate.name.trim()) errors.push('姓名不能为空')
+  if (!candidate.email.trim()) errors.push('邮箱不能为空')
+  if (!candidate.phone.trim()) errors.push('电话不能为空')
+  if (!resumeSummary.trim()) errors.push('简历摘要不能为空')
+
   if (errors.length > 0) {
     showToast('error', errors.join('；'))
     return
   }
-  
+
+  actionLoading.value = true
   try {
-    currentCandidate.value.resume_summary = resumeSummary
     await updateCandidate(currentCandidate.value.id, { resume_summary: resumeSummary })
-    
+
     const result = await createApplication({ job_id: jobId, candidate_id: currentCandidate.value.id })
     showToast('success', '投递成功')
-    
+
     showJobDetail.value = false
     await loadData()
-    
+
     const newApplication = applications.value.find(a => a.id === result.id)
     if (newApplication) {
       viewMessages(newApplication)
     }
   } catch (error: any) {
-    const errorMsg = error.response?.data?.error || '投递失败'
+    const errorMsg = error.response?.data?.error || '投递失败，请稍后重试'
     showToast('error', errorMsg)
+  } finally {
+    actionLoading.value = false
   }
 }
 
@@ -262,43 +255,68 @@ function openJobForm(job?: Job | null) {
   showJobForm.value = true
 }
 
-function handleJobSubmit(jobData: Omit<Job, 'id' | 'created_at' | 'updated_at'> | Partial<Job>) {
-  if (editingJob.value) {
-    updateJob(editingJob.value.id, jobData as Partial<Job>)
-      .then(() => {
-        showToast('success', '职位更新成功')
-        showJobForm.value = false
-        loadData()
-      })
-      .catch(() => showToast('error', '更新失败'))
-  } else {
-    createJob(jobData as Omit<Job, 'id' | 'created_at' | 'updated_at'>)
-      .then(() => {
-        showToast('success', '职位创建成功')
-        showJobForm.value = false
-        loadData()
-      })
-      .catch(() => showToast('error', '创建失败'))
+async function handleJobSubmit(jobData: Omit<Job, 'id' | 'created_at' | 'updated_at'> | Partial<Job>) {
+  actionLoading.value = true
+  try {
+    if (editingJob.value) {
+      await updateJob(editingJob.value.id, jobData as Partial<Job>)
+      showToast('success', '职位更新成功')
+    } else {
+      await createJob(jobData as Omit<Job, 'id' | 'created_at' | 'updated_at'>)
+      showToast('success', '职位创建成功')
+    }
+    showJobForm.value = false
+    await loadData()
+  } catch (error: any) {
+    const msg = error.response?.data?.error || (editingJob.value ? '更新失败' : '创建失败')
+    showToast('error', msg)
+  } finally {
+    actionLoading.value = false
   }
 }
 
 function handleDeleteJob(jobId: string) {
-  if (confirm('确定要删除这个职位吗？')) {
-    deleteJob(jobId)
-      .then(() => {
-        showToast('success', '删除成功')
-        loadData()
-      })
-      .catch(() => showToast('error', '删除失败'))
-  }
+  if (!confirm('确定要删除这个职位吗？删除后无法恢复。')) return
+  actionLoading.value = true
+  deleteJob(jobId)
+    .then(() => {
+      showToast('success', '删除成功')
+      loadData()
+    })
+    .catch((error: any) => {
+      const msg = error.response?.data?.error || '删除失败'
+      showToast('error', msg)
+    })
+    .finally(() => {
+      actionLoading.value = false
+    })
 }
 
 function viewCandidate(candidateId: string) {
   const candidate = candidates.value.find(c => c.id === candidateId)
   if (candidate) {
     selectedCandidate.value = candidate
+    pendingOfferAppId.value = ''
     showCandidateDetail.value = true
+  } else {
+    showToast('error', '候选人不存在')
   }
+}
+
+function startSendOfferFromList(applicationId: string) {
+  const app = applications.value.find(a => a.id === applicationId)
+  if (!app) {
+    showToast('error', '投递记录不存在')
+    return
+  }
+  const candidate = candidates.value.find(c => c.id === app.candidate_id)
+  if (!candidate) {
+    showToast('error', '候选人不存在')
+    return
+  }
+  selectedCandidate.value = candidate
+  pendingOfferAppId.value = applicationId
+  showCandidateDetail.value = true
 }
 
 function viewMessages(app: Application) {
@@ -307,32 +325,49 @@ function viewMessages(app: Application) {
   loadMessages(app.id)
 }
 
-function handleUpdateStatus(applicationId: string, status: string) {
-  updateApplicationStatus(applicationId, status)
-    .then(() => {
-      showToast('success', '状态更新成功')
-      loadData()
-      if (currentApplication.value?.id === applicationId && status !== 'communicating') {
-        showMessagePanel.value = false
+async function handleUpdateStatus(applicationId: string, status: string) {
+  if (!status) {
+    showToast('error', '请选择有效的状态')
+    return
+  }
+  actionLoading.value = true
+  try {
+    await updateApplicationStatus(applicationId, status)
+    showToast('success', `状态已更新为「${getStatusText(status)}」`)
+    await loadData()
+    if (currentApplication.value?.id === applicationId) {
+      const refreshed = applications.value.find(a => a.id === applicationId)
+      if (refreshed) {
+        currentApplication.value = refreshed
       }
-    })
-    .catch(() => showToast('error', '更新失败'))
+    }
+  } catch (error: any) {
+    const msg = error.response?.data?.error || '状态更新失败'
+    showToast('error', msg)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
-function handleSendMessage(content: string) {
+async function handleSendMessage(content: string) {
   if (!currentApplication.value) return
-  const senderType = currentRole.value
-  const senderId = senderType === 'recruiter' ? 'recruiter-1' : currentCandidate.value.id
-  createMessage({
-    application_id: currentApplication.value.id,
-    sender_id: senderId,
-    sender_type: senderType,
-    content
-  })
-    .then(() => {
-      loadMessages(currentApplication.value!.id)
+  actionLoading.value = true
+  try {
+    const senderType = currentRole.value
+    const senderId = senderType === 'recruiter' ? 'recruiter-1' : currentCandidate.value.id
+    await createMessage({
+      application_id: currentApplication.value.id,
+      sender_id: senderId,
+      sender_type: senderType,
+      content
     })
-    .catch(() => showToast('error', '发送失败'))
+    await loadMessages(currentApplication.value.id)
+  } catch (error: any) {
+    const msg = error.response?.data?.error || '消息发送失败'
+    showToast('error', msg)
+  } finally {
+    actionLoading.value = false
+  }
 }
 
 async function handleSendOffer(applicationId: string, offerData: {
@@ -341,93 +376,113 @@ async function handleSendOffer(applicationId: string, offerData: {
   start_date: string
   remarks?: string
 }) {
+  actionLoading.value = true
   try {
     await sendOffer(applicationId, offerData)
-    showToast('success', 'Offer发送成功')
+    showToast('success', 'Offer 发送成功')
     await loadData()
-    
+
     await createMessage({
       application_id: applicationId,
       sender_id: 'recruiter-1',
       sender_type: 'recruiter',
-      content: `招聘方已发送Offer，薪资范围：${offerData.offer_salary_min}-${offerData.offer_salary_max}，到岗时间：${offerData.start_date}`
+      content: `招聘方已发送 Offer，薪资范围：${offerData.offer_salary_min}-${offerData.offer_salary_max} 元，到岗时间：${offerData.start_date}`
     })
-    
+
     if (currentApplication.value?.id === applicationId) {
       loadMessages(applicationId)
     }
+    pendingOfferAppId.value = ''
   } catch (error: any) {
-    const errorMsg = error.response?.data?.error || '发送失败'
+    const errorMsg = error.response?.data?.error || 'Offer 发送失败'
     showToast('error', errorMsg)
+  } finally {
+    actionLoading.value = false
   }
 }
 
 async function handleAcceptOffer(applicationId: string) {
+  actionLoading.value = true
   try {
     await acceptOffer(applicationId)
-    showToast('success', 'Offer接受成功')
+    showToast('success', '已接受 Offer')
     await loadData()
-    
+
     await createMessage({
       application_id: applicationId,
       sender_id: currentCandidate.value.id,
       sender_type: 'candidate',
-      content: '候选人已接受Offer'
+      content: '候选人已接受 Offer'
     })
-    
+
     if (currentApplication.value?.id === applicationId) {
       loadMessages(applicationId)
     }
   } catch (error: any) {
     const errorMsg = error.response?.data?.error || '操作失败'
     showToast('error', errorMsg)
+  } finally {
+    actionLoading.value = false
   }
 }
 
 async function handleRejectOffer(applicationId: string) {
+  if (!confirm('确定要拒绝这个 Offer 吗？')) return
+  actionLoading.value = true
   try {
     await rejectOffer(applicationId)
-    showToast('success', 'Offer已拒绝')
+    showToast('success', '已拒绝 Offer')
     await loadData()
-    
+
     await createMessage({
       application_id: applicationId,
       sender_id: currentCandidate.value.id,
       sender_type: 'candidate',
-      content: '候选人已拒绝Offer'
+      content: '候选人已拒绝 Offer'
     })
-    
+
     if (currentApplication.value?.id === applicationId) {
       loadMessages(applicationId)
     }
   } catch (error: any) {
     const errorMsg = error.response?.data?.error || '操作失败'
     showToast('error', errorMsg)
+  } finally {
+    actionLoading.value = false
   }
 }
 
-function saveCandidateInfo() {
+async function saveCandidateInfo() {
   if (!currentCandidate.value.name || !currentCandidate.value.email) {
     showToast('error', '姓名和邮箱为必填项')
     return
   }
-  if (currentCandidate.value.id) {
-    updateCandidate(currentCandidate.value.id, currentCandidate.value)
-      .then(() => showToast('success', '信息更新成功'))
-      .catch(() => showToast('error', '更新失败'))
-  } else {
-    createCandidate(currentCandidate.value)
-      .then(({ id }) => {
-        currentCandidate.value.id = id
-        showToast('success', '信息保存成功')
-        loadData()
-      })
-      .catch(() => showToast('error', '保存失败'))
+  actionLoading.value = true
+  try {
+    if (currentCandidate.value.id) {
+      await updateCandidate(currentCandidate.value.id, currentCandidate.value)
+      showToast('success', '简历信息已更新')
+      await loadData()
+    } else {
+      const { id } = await createCandidate(currentCandidate.value)
+      currentCandidate.value.id = id
+      showToast('success', '简历信息已保存')
+      await loadData()
+    }
+  } catch (error: any) {
+    const msg = error.response?.data?.error || '保存失败'
+    showToast('error', msg)
+  } finally {
+    actionLoading.value = false
   }
 }
 
+function isOfferDetailVisible(app: Application): boolean {
+  return (app.status === 'offered' || app.status === 'offer_accepted') && !!app.offer_detail
+}
+
 const locations = computed(() => {
-  const set = new Set(jobs.value.map(j => j.location))
+  const set = new Set(jobs.value.map(j => j.location).filter(Boolean))
   return Array.from(set)
 })
 
@@ -503,7 +558,7 @@ onMounted(() => {
             <label class="form-label">简历摘要</label>
             <textarea v-model="currentCandidate.resume_summary" class="form-textarea" placeholder="请简要介绍您的工作经历和技能特长"></textarea>
           </div>
-          <button class="btn btn-primary" @click="saveCandidateInfo">保存简历</button>
+          <button class="btn btn-primary" :disabled="actionLoading" @click="saveCandidateInfo">保存简历</button>
         </div>
 
         <div class="card">
@@ -535,33 +590,35 @@ onMounted(() => {
                   {{ getStatusText(app.status) }}
                 </span>
               </div>
-              <div v-if="app.status === 'offered' && app.offer_detail" class="app-offer">
+              <div v-if="isOfferDetailVisible(app)" class="app-offer">
                 <div class="offer-info">
-                  <span>薪资：{{ app.offer_detail.offer_salary_min }}-{{ app.offer_detail.offer_salary_max }}</span>
-                  <span>到岗：{{ app.offer_detail.start_date }}</span>
+                  <span>薪资：{{ app.offer_detail!.offer_salary_min }}-{{ app.offer_detail!.offer_salary_max }} 元</span>
+                  <span>到岗：{{ app.offer_detail!.start_date || '-' }}</span>
                 </div>
               </div>
               <div class="app-meta">
                 <span>{{ formatDate(app.applied_at) }}</span>
               </div>
               <div class="app-actions">
-                <button 
-                  v-if="app.status === 'communicating'" 
-                  class="btn btn-primary btn-sm" 
+                <button
+                  v-if="canViewMessages(app.status)"
+                  class="btn btn-primary btn-sm"
                   @click="viewMessages(app)"
                 >
                   消息
                 </button>
-                <button 
-                  v-if="app.status === 'offered'" 
-                  class="btn btn-success btn-sm" 
+                <button
+                  v-if="app.status === 'offered'"
+                  class="btn btn-success btn-sm"
+                  :disabled="actionLoading"
                   @click="handleAcceptOffer(app.id)"
                 >
                   接受Offer
                 </button>
-                <button 
-                  v-if="app.status === 'offered'" 
-                  class="btn btn-danger btn-sm" 
+                <button
+                  v-if="app.status === 'offered'"
+                  class="btn btn-danger btn-sm"
+                  :disabled="actionLoading"
                   @click="handleRejectOffer(app.id)"
                 >
                   拒绝Offer
@@ -581,9 +638,9 @@ onMounted(() => {
             <h2>职位管理</h2>
             <button class="btn btn-primary" @click="openJobForm()">发布新职位</button>
           </div>
-          <JobList 
-          :jobs="filteredJobs" 
-          :show-status="true" 
+          <JobList
+          :jobs="filteredJobs"
+          :show-status="true"
           :show-actions="true"
           @view-detail="viewJobDetail"
           @edit="openJobForm"
@@ -596,23 +653,23 @@ onMounted(() => {
             <h2>投递列表</h2>
           </div>
           <div class="filter-bar">
-            <input 
-              v-model="recruiterFilter.keyword" 
-              type="text" 
-              class="form-input" 
+            <input
+              v-model="recruiterFilter.keyword"
+              type="text"
+              class="form-input"
               placeholder="搜索候选人姓名、邮箱或职位"
               style="width: 200px;"
             />
-            <select 
-              v-model="recruiterFilter.jobId" 
+            <select
+              v-model="recruiterFilter.jobId"
               class="form-select"
               style="width: 150px;"
             >
               <option value="">全部职位</option>
               <option v-for="job in jobs" :key="job.id" :value="job.id">{{ job.title }}</option>
             </select>
-            <select 
-              v-model="recruiterFilter.status" 
+            <select
+              v-model="recruiterFilter.status"
               class="form-select"
               style="width: 120px;"
             >
@@ -621,6 +678,7 @@ onMounted(() => {
               <option value="communicating">沟通中</option>
               <option value="interviewing">面试中</option>
               <option value="offered">已发offer</option>
+              <option value="offer_accepted">已接受offer</option>
               <option value="rejected">已拒绝</option>
             </select>
           </div>
@@ -631,6 +689,7 @@ onMounted(() => {
             @view-candidate="viewCandidate"
             @view-message="viewMessages"
             @update-status="handleUpdateStatus"
+            @send-offer="startSendOfferFromList"
           />
         </div>
       </div>
@@ -664,10 +723,11 @@ onMounted(() => {
 
     <div v-if="showCandidateDetail" class="modal-overlay" @click.self="showCandidateDetail = false">
       <div class="modal" style="max-width: 900px;">
-        <CandidateDetail 
-          :candidate="selectedCandidate" 
+        <CandidateDetail
+          :candidate="selectedCandidate"
           :applications="applications"
           :jobs="jobsMap"
+          :offer-app-id="pendingOfferAppId"
           @close="showCandidateDetail = false"
           @view-message="viewMessages"
           @update-status="handleUpdateStatus"
@@ -683,6 +743,7 @@ onMounted(() => {
           :application="currentApplication"
           :job="currentApplication ? jobsMap.get(currentApplication.job_id) || null : null"
           :candidate="currentApplication ? candidatesMap.get(currentApplication.candidate_id) || null : null"
+          :disabled="actionLoading"
           @send="handleSendMessage"
           @close="showMessagePanel = false"
         />
@@ -845,5 +906,16 @@ onMounted(() => {
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid #f0f0f0;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 40px;
+  color: #999;
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 </style>

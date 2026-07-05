@@ -170,9 +170,19 @@ body {
   color: #1565c0;
 }
 
+.badge-interviewing {
+  background-color: #fff8e1;
+  color: #ef6c00;
+}
+
 .badge-offered {
   background-color: #f3e5f5;
   color: #7b1fa2;
+}
+
+.badge-offer_accepted {
+  background-color: #e0f2f1;
+  color: #00695c;
 }
 
 .badge-rejected {

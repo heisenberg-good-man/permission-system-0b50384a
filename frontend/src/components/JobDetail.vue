@@ -23,7 +23,7 @@ function formatSalary(min: number, max: number): string {
 }
 
 function handleApply() {
-  if (resumeSummary.value.trim() && props.job) {
+  if (props.job) {
     emit('apply', props.job.id, resumeSummary.value)
     showApplyForm.value = false
     resumeSummary.value = ''
